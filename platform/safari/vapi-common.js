@@ -21,6 +21,9 @@
 
 // For background page or non-background pages
 
+/* global self */
+
+/******************************************************************************/
 /******************************************************************************/
 
 (function() {
@@ -28,6 +31,10 @@
 'use strict';
 
 var vAPI = self.vAPI = self.vAPI || {};
+
+/******************************************************************************/
+
+vAPI.setTimeout = vAPI.setTimeout || self.setTimeout.bind(self);
 
 /******************************************************************************/
 
@@ -48,29 +55,9 @@ vAPI.download = function(details) {
     }
 
     var a = document.createElement('a');
-
-    if ( 'download' in a ) {
-        a.href = details.url;
-        a.setAttribute('download', details.filename || '');
-        a.dispatchEvent(new MouseEvent('click'));
-        return;
-    }
-    var request = {
-        what: 'gotoURL',
-        details: {
-            url: details.url,
-            index: -1
-        }
-    };
-
-    if ( vAPI.isMainProcess ) {
-        vAPI.tabs.open(request.details);
-        return;
-    }
-
-    var messager = vAPI.messaging.channel('_download');
-    messager.send(request);
-    messager.close();
+    a.href = details.url;
+    a.setAttribute('download', details.filename || '');
+    a.dispatchEvent(new MouseEvent('click'));
 };
 
 /******************************************************************************/
@@ -123,7 +110,7 @@ vAPI.i18n = function(s) {
 
 vAPI.closePopup = function() {
     var popover = safari.extension.popovers[0];
-    if ( popover ) {
+    if (popover) {
         popover.hide();
     }
 };

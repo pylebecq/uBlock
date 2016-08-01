@@ -18,11 +18,14 @@
 
     Home: https://github.com/gorhill/uBlock
 */
-/******************************************************************************/
+
+'use strict';
+
 // For non background pages
 
+/******************************************************************************/
+
 (function(self) {
-    'use strict';
     var vAPI = self.vAPI = self.vAPI || {};
     if(vAPI.vapiClientInjected) {
         return;
@@ -38,28 +41,12 @@
     vAPI.safari = true;
     vAPI.sessionId = String.fromCharCode(Date.now() % 25 + 97) +
         Math.random().toString(36).slice(2);
-    /******************************************************************************/
-    vAPI.shutdown = (function() {
-        var jobs = [];
-
-        var add = function(job) {
-            jobs.push(job);
-        };
-
-        var exec = function() {
-            //console.debug('Shutting down...');
-            var job;
-            while ( job = jobs.pop() ) {
-                job();
-            }
-        };
-
-        return {
-            add: add,
-            exec: exec
-        };
-    })();
-    /******************************************************************************/
+/******************************************************************************/
+vAPI.executionCost = {
+    start: function(){},
+    stop: function(){}
+};
+/******************************************************************************/
     var messagingConnector = function(response) {
         if(!response) {
             return;
@@ -195,8 +182,9 @@
     }
 
     // Inform that we've navigated
+    var shouldBlockScript = false;
     if(frameId === 0) {
-        safari.self.tab.canLoad(beforeLoadEvent, {
+        shouldBlockScript = !safari.self.tab.canLoad(beforeLoadEvent, {
             url: location.href,
             type: "main_frame"
         });
@@ -246,9 +234,20 @@
     var firstMutation = function() {
         document.removeEventListener("DOMContentLoaded", firstMutation, true);
         firstMutation = false;
+        if(shouldBlockScript) {
+            var meta = document.createElement('meta');
+            meta.setAttribute("http-equiv", "content-security-policy");
+            meta.setAttribute("content", "script-src 'unsafe-eval' *");
+            if(document.documentElement.firstChild) {
+                document.documentElement.insertBefore(meta, document.documentElement.firstChild);
+            }
+            else {
+                document.documentElement.appendChild(meta);
+            }
+        }
         document.addEventListener(vAPI.sessionId, function(e) {
             if(shouldBlockDetailedRequest(e.detail)) {
-                e.detail.url = false;
+                document.documentElement.setAttribute("data-ublock-blocked", "true");
             }
         }, true);
         var tmpJS = document.createElement("script");
@@ -260,14 +259,16 @@ var block = function(u, t) {" +
 e.initCustomEvent('" + vAPI.sessionId + "', false, false, {url: u, type: t});"
 : "var e = new CustomEvent('" + vAPI.sessionId + "', {bubbles: false, detail: {url: u, type: t}});"
 ) +
-"document.dispatchEvent(e);\
-return e.detail.url === false;\
+"document.documentElement.setAttribute('data-ublock-blocked', '');\
+document.dispatchEvent(e);\
+return !!document.documentElement.getAttribute('data-ublock-blocked');\
 },\
 wo = open,\
 xo = XMLHttpRequest.prototype.open,\
 img = Image;\
 Image = function() {\
 var x = new img();\
+try{\
 Object.defineProperty(x, 'src', {\
 get: function() {\
 return x.getAttribute('src');\
@@ -276,10 +277,11 @@ set: function(val) {\
 x.setAttribute('src', block(val, 'image') ? 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=' : val);\
 }\
 });\
+}\catch(e){}\
 return x;\
 };\
 open = function(u) {\
-return block(u, 'popup') ? null : wo.apply(this, arguments);\
+if(block(u, 'popup')) return {}; else return wo.apply(this, arguments);\
 };\
 XMLHttpRequest.prototype.open = function(m, u) {\
 if(block(u, 'xmlhttprequest')) {throw 'InvalidAccessError'; return;}\
